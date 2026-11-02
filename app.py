@@ -93,6 +93,38 @@ init_db()
 # --- 網頁版面設定 ---
 st.set_page_config(page_title="AA專屬銀行", page_icon="💳", layout="centered")
 
+# --- 自定義 Hello Kitty & Daniel 滿版背景樣式 ---
+st.markdown(
+    """
+    <style>
+    /* 設定整個 Streamlit 頁面的背景圖片 */
+    .stApp {
+        background-image: url("https://i.pinimg.com/236x/f9/5f/8c/f95f8c0080dcef40aa4d8c97b7fab9b5.jpg"); /* 這裡可以換成你喜歡的 Hello Kitty & Daniel 圖片直連網址 */
+        background-size: cover;        /* 讓圖片自動縮放鋪滿畫面 */
+        background-position: center;   /* 圖片置中 */
+        background-repeat: no-repeat;  /* 不重複平鋪 */
+        background-attachment: fixed;  /* 固定背景，滾動頁面時背景不動 */
+    }
+
+    /* 讓主要的內容區塊（白色卡片感）帶有半透明效果，確保文字看得清楚 */
+    .block-container {
+        background-color: rgba(255, 255, 255, 0.88); /* 88% 不透明的白色背景 */
+        padding: 2.5rem;
+        border-radius: 20px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        margin-top: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    /* 側邊欄也加上柔和的半透明背景 */
+    [data-testid="stSidebar"] {
+        background-color: rgba(255, 240, 245, 0.92); /* 淡淡的粉紅色調 */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # --- 登入狀態管理 ---
 if "logged_in" not in st.session_state:
   st.session_state.logged_in = False
