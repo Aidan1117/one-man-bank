@@ -7,7 +7,7 @@ db_url = st.secrets["database"]["url"]
 
 
 def init_db():
-  conn = psycopg2.connect(db_url)
+  conn = psycopg2.connect(db_url, sslmode="require")
   c = conn.cursor()
 
   # 建立帳戶餘額表
