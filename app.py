@@ -2,82 +2,73 @@ from datetime import datetime
 import psycopg2
 import streamlit as st
 
-# --- 讀取 Streamlit Secrets 的連線字串 ---
+# --- 讀取 Streamlit Secrets 中的 Session Pooler 連線字串 ---
 db_url = st.secrets["database"]["url"]
 
 
-# --- 建立資料庫連線與初始化 ---
-def init_db():
-  # 加上 sslmode='require' 確保能安全連線到雲端
-  conn = psycopg2.connect(db_url, sslmode="require")
-  c = conn.cursor()
-
-  # 建立帳戶餘額表
-  c.execute(
-      """CREATE TABLE IF NOT EXISTS accounts (
-                username TEXT PRIMARY KEY, 
-                balance REAL
-            )"""
-  )
-
-  # 建立 Coupon 表
-  c.execute(
-      """CREATE TABLE IF NOT EXISTS coupons (
-                id SERIAL PRIMARY KEY, 
-                owner TEXT, 
-                title TEXT, 
-                value REAL, 
-                is_used INTEGER
-            )"""
-  )
-
-  # 建立歷史紀錄表
-  c.execute(
-      """CREATE TABLE IF NOT EXISTS history (
-                id SERIAL PRIMARY KEY, 
-                time TEXT, 
-                sender TEXT, 
-                receiver TEXT, 
-                type TEXT, 
-                content TEXT, 
-                amount REAL
-            )"""
-  )
-
-  # 初始化預設帳號 (admin, wife)，若已存在則略過
-  c.execute(
-      """INSERT INTO accounts (username, balance) 
-               VALUES ('admin', 0) 
-               ON CONFLICT (username) DO NOTHING"""
-  )
-  c.execute(
-      """INSERT INTO accounts (username, balance) 
-               VALUES ('wife', 0) 
-               ON CONFLICT (username) DO NOTHING"""
-  )
-
-  conn.commit()
-  return conn
-
-
-# 初始化資料庫
-conn = init_db()
-
-
-# 輔助執行查詢的函數
+# --- 通用資料庫查詢與更新函式 (適合 Session Pooler 模式) ---
 def run_query(query, params=None, fetch=False):
-  # 每次操作重新連線確保穩定
-  db_conn = psycopg2.connect(db_url, sslmode="require")
-  cursor = db_conn.cursor()
+  conn = psycopg2.connect(db_url)
+  cursor = conn.cursor()
   cursor.execute(query, params)
   result = None
   if fetch:
     result = cursor.fetchall()
-  db_conn.commit()
+  conn.commit()
   cursor.close()
-  db_conn.close()
+  conn.close()
   return result
 
+
+# --- 初始化資料庫表格與預設帳號 ---
+def init_db():
+  # 1. 建立帳戶餘額表
+  run_query("""
+        CREATE TABLE IF NOT EXISTS accounts (
+            username TEXT PRIMARY KEY, 
+            balance REAL
+        )
+    """)
+
+  # 2. 建立 Coupon 表
+  run_query("""
+        CREATE TABLE IF NOT EXISTS coupons (
+            id SERIAL PRIMARY KEY, 
+            owner TEXT, 
+            title TEXT, 
+            value REAL, 
+            is_used INTEGER
+        )
+    """)
+
+  # 3. 建立歷史紀錄表
+  run_query("""
+        CREATE TABLE IF NOT EXISTS history (
+            id SERIAL PRIMARY KEY, 
+            time TEXT, 
+            sender TEXT, 
+            receiver TEXT, 
+            type TEXT, 
+            content TEXT, 
+            amount REAL
+        )
+    """)
+
+  # 4. 初始化預設帳號 (admin, wife)，若已存在則略過
+  run_query("""
+        INSERT INTO accounts (username, balance) 
+        VALUES ('admin', 0) 
+        ON CONFLICT (username) DO NOTHING
+    """)
+  run_query("""
+        INSERT INTO accounts (username, balance) 
+        VALUES ('wife', 0) 
+        ON CONFLICT (username) DO NOTHING
+    """)
+
+
+# 執行初始化
+init_db()
 
 # --- 網頁版面設定 ---
 st.set_page_config(page_title="專屬寵妻銀行", page_icon="💳", layout="centered")
