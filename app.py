@@ -1,74 +1,83 @@
 from datetime import datetime
+import psycopg2
 import streamlit as st
 
-# --- 建立 Streamlit 內建雲端資料庫連線 ---
-conn = st.connection("postgresql", type="sql")
+# --- 讀取 Streamlit Secrets 的連線字串 ---
+db_url = st.secrets["database"]["url"]
 
 
-# --- 初始化資料庫表格 ---
+# --- 建立資料庫連線與初始化 ---
 def init_db():
+  # 加上 sslmode='require' 確保能安全連線到雲端
+  conn = psycopg2.connect(db_url, sslmode="require")
+  c = conn.cursor()
+
   # 建立帳戶餘額表
-  conn.query(
-      """
-        CREATE TABLE IF NOT EXISTS accounts (
-            username TEXT PRIMARY KEY, 
-            balance REAL
-        )
-    """,
-      ttl=0,
+  c.execute(
+      """CREATE TABLE IF NOT EXISTS accounts (
+                username TEXT PRIMARY KEY, 
+                balance REAL
+            )"""
   )
 
   # 建立 Coupon 表
-  conn.query(
-      """
-        CREATE TABLE IF NOT EXISTS coupons (
-            id SERIAL PRIMARY KEY, 
-            owner TEXT, 
-            title TEXT, 
-            value REAL, 
-            is_used INTEGER
-        )
-    """,
-      ttl=0,
+  c.execute(
+      """CREATE TABLE IF NOT EXISTS coupons (
+                id SERIAL PRIMARY KEY, 
+                owner TEXT, 
+                title TEXT, 
+                value REAL, 
+                is_used INTEGER
+            )"""
   )
 
   # 建立歷史紀錄表
-  conn.query(
-      """
-        CREATE TABLE IF NOT EXISTS history (
-            id SERIAL PRIMARY KEY, 
-            time TEXT, 
-            sender TEXT, 
-            receiver TEXT, 
-            type TEXT, 
-            content TEXT, 
-            amount REAL
-        )
-    """,
-      ttl=0,
+  c.execute(
+      """CREATE TABLE IF NOT EXISTS history (
+                id SERIAL PRIMARY KEY, 
+                time TEXT, 
+                sender TEXT, 
+                receiver TEXT, 
+                type TEXT, 
+                content TEXT, 
+                amount REAL
+            )"""
   )
 
   # 初始化預設帳號 (admin, wife)，若已存在則略過
-  conn.query(
-      """
-        INSERT INTO accounts (username, balance) 
-        VALUES ('admin', 0) 
-        ON CONFLICT (username) DO NOTHING
-    """,
-      ttl=0,
+  c.execute(
+      """INSERT INTO accounts (username, balance) 
+               VALUES ('admin', 0) 
+               ON CONFLICT (username) DO NOTHING"""
   )
-  conn.query(
-      """
-        INSERT INTO accounts (username, balance) 
-        VALUES ('wife', 0) 
-        ON CONFLICT (username) DO NOTHING
-    """,
-      ttl=0,
+  c.execute(
+      """INSERT INTO accounts (username, balance) 
+               VALUES ('wife', 0) 
+               ON CONFLICT (username) DO NOTHING"""
   )
 
+  conn.commit()
+  return conn
 
-# 執行初始化
-init_db()
+
+# 初始化資料庫
+conn = init_db()
+
+
+# 輔助執行查詢的函數
+def run_query(query, params=None, fetch=False):
+  # 每次操作重新連線確保穩定
+  db_conn = psycopg2.connect(db_url, sslmode="require")
+  cursor = db_conn.cursor()
+  cursor.execute(query, params)
+  result = None
+  if fetch:
+    result = cursor.fetchall()
+  db_conn.commit()
+  cursor.close()
+  db_conn.close()
+  return result
+
 
 # --- 網頁版面設定 ---
 st.set_page_config(page_title="專屬寵妻銀行", page_icon="💳", layout="centered")
@@ -108,10 +117,10 @@ else:
     st.rerun()
 
   # --- 查詢目前老婆餘額 ---
-  df_balance = conn.query(
-      "SELECT balance FROM accounts WHERE username='wife'", ttl=0
+  res_balance = run_query(
+      "SELECT balance FROM accounts WHERE username='wife'", fetch=True
   )
-  wife_balance = float(df_balance.iloc[0]["balance"]) if not df_balance.empty else 0.0
+  wife_balance = float(res_balance[0][0]) if res_balance else 0.0
 
   # ==================== 老婆視角 ====================
   if user == "wife":
@@ -139,26 +148,14 @@ else:
           new_balance = wife_balance - spend_amt
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-          # 更新餘額與寫入歷史
-          conn.query(
-              "UPDATE accounts SET balance = :bal WHERE username='wife'",
-              params={"bal": new_balance},
-              ttl=0,
+          run_query(
+              "UPDATE accounts SET balance = %s WHERE username='wife'",
+              (new_balance,),
           )
-          conn.query(
-              """
-                    INSERT INTO history (time, sender, receiver, type, content, amount) 
-                    VALUES (:time, :sender, :receiver, :type, :content, :amount)
-                """,
-              params={
-                  "time": time_str,
-                  "sender": "wife",
-                  "receiver": "system",
-                  "type": "消費扣款",
-                  "content": spend_reason,
-                  "amount": spend_amt,
-              },
-              ttl=0,
+          run_query(
+              """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+              (time_str, "wife", "system", "消費扣款", spend_reason, spend_amt),
           )
 
           st.success(f"成功扣款 ${spend_amt}！")
@@ -168,41 +165,36 @@ else:
 
     # 2. Coupon 專區
     st.subheader("🎟️ 我的可用 Coupon")
-    df_coupons = conn.query(
+    available_coupons = run_query(
         "SELECT id, title, value FROM coupons WHERE owner='wife' AND is_used=0",
-        ttl=0,
+        fetch=True,
     )
 
-    if df_coupons.empty:
+    if not available_coupons:
       st.info("目前沒有可用的 Coupon，快跟老公撒嬌索取吧！")
     else:
-      for _, cp in df_coupons.iterrows():
-        cp_id, cp_title, cp_val = cp["id"], cp["title"], cp["value"]
+      for cp in available_coupons:
+        cp_id, cp_title, cp_val = cp[0], cp[1], cp[2]
         col1, col2 = st.columns([3, 1])
         with col1:
           st.markdown(f"**🎁 {cp_title}** (面額/價值: ${cp_val})")
         with col2:
           if st.button("使用", key=f"use_cp_{cp_id}"):
             time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn.query(
-                "UPDATE coupons SET is_used = 1 WHERE id = :id",
-                params={"id": int(cp_id)},
-                ttl=0,
+            run_query(
+                "UPDATE coupons SET is_used = 1 WHERE id = %s", (int(cp_id),)
             )
-            conn.query(
-                """
-                        INSERT INTO history (time, sender, receiver, type, content, amount) 
-                        VALUES (:time, :sender, :receiver, :type, :content, :amount)
-                    """,
-                params={
-                    "time": time_str,
-                    "sender": "wife",
-                    "receiver": "system",
-                    "type": "使用Coupon",
-                    "content": cp_title,
-                    "amount": cp_val,
-                },
-                ttl=0,
+            run_query(
+                """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                         VALUES (%s, %s, %s, %s, %s, %s)""",
+                (
+                    time_str,
+                    "wife",
+                    "system",
+                    "使用Coupon",
+                    cp_title,
+                    cp_val,
+                ),
             )
             st.success(f"已成功使用優惠券：{cp_title}！")
             st.rerun()
@@ -211,23 +203,21 @@ else:
 
     # 3. 歷史紀錄
     st.subheader("📜 帳戶與優惠券歷史紀錄")
-    df_history = conn.query(
-        """
-            SELECT time, type, content, amount 
-            FROM history 
-            WHERE sender='wife' OR receiver='wife' 
-            ORDER BY id DESC
-        """,
-        ttl=0,
+    history = run_query(
+        """SELECT time, type, content, amount 
+               FROM history 
+               WHERE sender='wife' OR receiver='wife' 
+               ORDER BY id DESC""",
+        fetch=True,
     )
-    if not df_history.empty:
+    if history:
       history_data = []
-      for _, h in df_history.iterrows():
+      for h in history:
         history_data.append({
-            "時間": h["time"],
-            "類型": h["type"],
-            "項目/說明": h["content"],
-            "金額/價值": h["amount"],
+            "時間": h[0],
+            "類型": h[1],
+            "項目/說明": h[2],
+            "金額/價值": h[3],
         })
       st.dataframe(history_data, use_container_width=True)
     else:
@@ -254,25 +244,14 @@ else:
           new_balance = wife_balance + trans_amt
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-          conn.query(
-              "UPDATE accounts SET balance = :bal WHERE username='wife'",
-              params={"bal": new_balance},
-              ttl=0,
+          run_query(
+              "UPDATE accounts SET balance = %s WHERE username='wife'",
+              (new_balance,),
           )
-          conn.query(
-              """
-                    INSERT INTO history (time, sender, receiver, type, content, amount) 
-                    VALUES (:time, :sender, :receiver, :type, :content, :amount)
-                """,
-              params={
-                  "time": time_str,
-                  "sender": "admin",
-                  "receiver": "wife",
-                  "type": "轉帳入帳",
-                  "content": trans_memo,
-                  "amount": trans_amt,
-              },
-              ttl=0,
+          run_query(
+              """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                       VALUES (%s, %s, %s, %s, %s, %s)""",
+              (time_str, "admin", "wife", "轉帳入帳", trans_memo, trans_amt),
           )
 
           st.success(f"成功轉帳 ${trans_amt} 給老婆！")
@@ -293,28 +272,22 @@ else:
             st.error("請輸入 Coupon 名稱！")
           else:
             time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            conn.query(
-                """
-                        INSERT INTO coupons (owner, title, value, is_used) 
-                        VALUES ('wife', :title, :val, 0)
-                    """,
-                params={"title": cp_title, "val": cp_val},
-                ttl=0,
+            run_query(
+                """INSERT INTO coupons (owner, title, value, is_used) 
+                         VALUES ('wife', %s, %s, 0)""",
+                (cp_title, cp_val),
             )
-            conn.query(
-                """
-                        INSERT INTO history (time, sender, receiver, type, content, amount) 
-                        VALUES (:time, :sender, :receiver, :type, :content, :amount)
-                    """,
-                params={
-                    "time": time_str,
-                    "sender": "admin",
-                    "receiver": "wife",
-                    "type": "發放Coupon",
-                    "content": cp_title,
-                    "amount": cp_val,
-                },
-                ttl=0,
+            run_query(
+                """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                         VALUES (%s, %s, %s, %s, %s, %s)""",
+                (
+                    time_str,
+                    "admin",
+                    "wife",
+                    "發放Coupon",
+                    cp_title,
+                    cp_val,
+                ),
             )
             st.success(f"成功發放 Coupon：{cp_title}！")
             st.rerun()
@@ -322,24 +295,22 @@ else:
     # Tab 3: 全局歷史紀錄
     with tab3:
       st.subheader("所有進出與操作紀錄")
-      df_all_history = conn.query(
-          """
-            SELECT time, sender, receiver, type, content, amount 
-            FROM history 
-            ORDER BY id DESC
-        """,
-          ttl=0,
+      all_history = run_query(
+          """SELECT time, sender, receiver, type, content, amount 
+                 FROM history 
+                 ORDER BY id DESC""",
+          fetch=True,
       )
-      if not df_all_history.empty:
+      if all_history:
         history_data = []
-        for _, h in df_all_history.iterrows():
+        for h in all_history:
           history_data.append({
-              "時間": h["time"],
-              "發送方": h["sender"],
-              "接收方": h["receiver"],
-              "類型": h["type"],
-              "內容": h["content"],
-              "金額/價值": h["amount"],
+              "時間": h[0],
+              "發送方": h[1],
+              "接收方": h[2],
+              "類型": h[3],
+              "內容": h[4],
+              "金額/價值": h[5],
           })
         st.dataframe(history_data, use_container_width=True)
       else:
