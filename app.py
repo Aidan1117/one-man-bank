@@ -1,9 +1,22 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
+import requests
 import streamlit as st
 
-# --- 讀取 Streamlit Secrets 中的 Session Pooler 連線字串 ---
+# --- 讀取 Streamlit Secrets ---
 db_url = st.secrets["database"]["url"]
+DISCORD_WEBHOOK_URL = st.secrets.get("discord", {}).get("webhook_url", "")
+
+
+# --- Discord 推播通知函式 ---
+def send_discord_notification(message):
+  if not DISCORD_WEBHOOK_URL:
+    return
+  payload = {"content": message}
+  try:
+    requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5)
+  except Exception as e:
+    print(f"Discord 推播失敗: {e}")
 
 
 # --- 通用資料庫查詢與更新函式 ---
@@ -20,17 +33,14 @@ def run_query(query, params=None, fetch=False):
   return result
 
 
-# --- 初始化資料庫表格與預設帳號 ---
+# --- 初始化資料庫表格 ---
 def init_db():
-  # 1. 帳戶餘額表
   run_query("""
         CREATE TABLE IF NOT EXISTS accounts (
             username TEXT PRIMARY KEY, 
             balance REAL
         )
     """)
-
-  # 2. Coupon 表
   run_query("""
         CREATE TABLE IF NOT EXISTS coupons (
             id SERIAL PRIMARY KEY, 
@@ -40,8 +50,6 @@ def init_db():
             is_used INTEGER
         )
     """)
-
-  # 3. 歷史紀錄表
   run_query("""
         CREATE TABLE IF NOT EXISTS history (
             id SERIAL PRIMARY KEY, 
@@ -53,8 +61,6 @@ def init_db():
             amount REAL
         )
     """)
-
-  # 4. 每月簽到紀錄表 (用年月標記，確保每個月只能簽到一次)
   run_query("""
         CREATE TABLE IF NOT EXISTS signins (
             username TEXT,
@@ -62,8 +68,6 @@ def init_db():
             PRIMARY KEY (username, year_month)
         )
     """)
-
-  # 5. 每月心願留言板表
   run_query("""
         CREATE TABLE IF NOT EXISTS messages (
             id SERIAL PRIMARY KEY,
@@ -74,51 +78,73 @@ def init_db():
         )
     """)
 
-  # 6. 初始化預設帳號 (admin, albee)，若已存在則略過
   run_query("""
         INSERT INTO accounts (username, balance) 
-        VALUES ('admin', 0) 
-        ON CONFLICT (username) DO NOTHING
+        VALUES ('admin', 0) ON CONFLICT (username) DO NOTHING
     """)
   run_query("""
         INSERT INTO accounts (username, balance) 
-        VALUES ('albee', 0) 
-        ON CONFLICT (username) DO NOTHING
+        VALUES ('albee', 0) ON CONFLICT (username) DO NOTHING
     """)
 
 
-# 執行初始化
 init_db()
+
+
+# --- 檢查 Supabase 防睡眠機制 (超過 6 天無活動則發送 Discord 提醒) ---
+def check_supabase_sleep_risk():
+  try:
+    # 取得歷史紀錄中最新的一筆時間
+    res = run_query(
+        "SELECT time FROM history ORDER BY id DESC LIMIT 1", fetch=True
+    )
+    if res and res[0][0]:
+      last_time_str = res[0][0]
+      last_time = datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
+      now = datetime.now()
+
+      # 如果超過 6 天沒有任何操作紀錄
+      if now - last_time >= timedelta(days=6):
+        # 檢查今天是否已經發送過防睡眠提醒（避免每次重新整理網頁都轟炸 Discord）
+        today_check_key = f"sleep_warn_{now.strftime('%Y-%m-%d')}"
+        if today_check_key not in st.session_state:
+          send_discord_notification(
+              "⚠️ **[Supabase 防睡眠系統提醒]**\n"
+              f"距離上次資料庫活動已超過 6 天（上次時間：`{last_time_str}`）。\n"
+              "請盡快登入網站進行互動或點擊一下，防止資料庫進入休眠狀態！✨"
+          )
+          st.session_state[today_check_key] = True
+  except Exception as e:
+    print(f"防睡眠檢查失敗: {e}")
+
+
+# 執行防睡眠檢查
+check_supabase_sleep_risk()
 
 # --- 網頁版面設定 ---
 st.set_page_config(page_title="AA專屬銀行", page_icon="💳", layout="centered")
 
-# --- 自定義 Hello Kitty & Daniel 滿版背景樣式 ---
+# --- 自定義 Hello Kitty & Daniel 背景樣式 ---
 st.markdown(
     """
     <style>
-    /* 設定整個 Streamlit 頁面的背景圖片 */
     .stApp {
-        background-image: url("https://i.pinimg.com/236x/f9/5f/8c/f95f8c0080dcef40aa4d8c97b7fab9b5.jpg"); /* 這裡可以換成你喜歡的 Hello Kitty & Daniel 圖片直連網址 */
-        background-size: cover;        /* 讓圖片自動縮放鋪滿畫面 */
-        background-position: center;   /* 圖片置中 */
-        background-repeat: no-repeat;  /* 不重複平鋪 */
-        background-attachment: fixed;  /* 固定背景，滾動頁面時背景不動 */
+        background-image: url("https://i.pinimg.com/236x/f9/5f/8c/f95f8c0080dcef40aa4d8c97b7fab9b5.jpg");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }
-
-    /* 讓主要的內容區塊（白色卡片感）帶有半透明效果，確保文字看得清楚 */
     .block-container {
-        background-color: rgba(255, 255, 255, 0.88); /* 88% 不透明的白色背景 */
+        background-color: rgba(255, 255, 255, 0.88);
         padding: 2.5rem;
         border-radius: 20px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
         margin-top: 2rem;
         margin-bottom: 2rem;
     }
-
-    /* 側邊欄也加上柔和的半透明背景 */
     [data-testid="stSidebar"] {
-        background-color: rgba(255, 240, 245, 0.92); /* 淡淡的粉紅色調 */
+        background-color: rgba(255, 240, 245, 0.92);
     }
     </style>
     """,
@@ -135,7 +161,6 @@ if not st.session_state.logged_in:
   st.title("💳 AA專屬銀行登入")
   st.markdown("請輸入帳號密碼以存取您的資產與優惠券。")
 
-  # 更新後的帳號密碼
   users = {"admin": "1117", "albee": "0417"}
 
   with st.form("login_form"):
@@ -147,6 +172,13 @@ if not st.session_state.logged_in:
       if username_input in users and users[username_input] == password_input:
         st.session_state.logged_in = True
         st.session_state.username = username_input
+
+        # 【新功能 1】Albee 登入時發送 Discord 通知
+        if username_input == "albee":
+          send_discord_notification(
+              "👑 **[登入通知]**\n老婆大人 Albee 剛剛登入了專屬寵妻銀行！✨"
+          )
+
         st.rerun()
       else:
         st.error("帳號或密碼錯誤！")
@@ -160,7 +192,6 @@ else:
     st.session_state.username = ""
     st.rerun()
 
-  # --- 查詢目前 Albee 的餘額 ---
   res_balance = run_query(
       "SELECT balance FROM accounts WHERE username='albee'", fetch=True
   )
@@ -169,16 +200,14 @@ else:
   # ==================== 老婆 (Albee) 視角 ====================
   if user == "albee":
     st.title("👑 老婆的專屬財庫")
-
     st.metric(label="目前可用寵妻基金餘額", value=f"$ {albee_balance:,.0f}")
     st.divider()
 
-    # 1. 每月簽到區
+    # 1. 📅 每月專屬簽到
     st.subheader("📅 每月專屬簽到")
     current_ym = datetime.now().strftime("%Y-%m")
     current_month_str = datetime.now().strftime("%m月")
 
-    # 檢查本月是否已簽到
     checked_in = run_query(
         "SELECT 1 FROM signins WHERE username='albee' AND year_month=%s",
         (current_ym,),
@@ -186,25 +215,22 @@ else:
     )
 
     if checked_in:
-      st.success(
-          f"✨ 您已經完成 {current_month_str} 的簽到囉！領取 1500 寵妻基金。"
+      st.info(
+          f"✨ 您已經完成 {current_month_str} 的簽到囉！已領取 1500 寵妻基金。"
       )
     else:
       if st.button(f"點擊進行 {current_month_str} 簽到 (領取 $1500)"):
         time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_balance = albee_balance + 1500
 
-        # 寫入簽到紀錄
         run_query(
             "INSERT INTO signins (username, year_month) VALUES ('albee', %s)",
             (current_ym,),
         )
-        # 更新餘額
         run_query(
             "UPDATE accounts SET balance = %s WHERE username='albee'",
             (new_balance,),
         )
-        # 寫入歷史紀錄
         run_query(
             """INSERT INTO history (time, sender, receiver, type, content, amount) 
                      VALUES (%s, %s, %s, %s, %s, %s)""",
@@ -218,22 +244,21 @@ else:
             ),
         )
 
+        send_discord_notification(
+            f"🔔 **[寵妻銀行通知]**\n老婆 Albee 已完成 **{current_month_str}**"
+            " 簽到！系統已自動撥款 **$1,500** 寵妻基金！"
+        )
+
         st.success(f"🎉 簽到成功！已自動幫您增加 $1,500 寵妻基金！")
         st.rerun()
 
     st.divider()
 
-    # 2. 每月心願留言板區
+    # 2. 💌 每月心願留言板
     st.subheader("💌 每月心願留言板")
-    st.markdown(
-        "寫下您本月的心願或想對老公說的話，老公看到後會為您審核並分配額度喔！"
-    )
-
-    # 檢查本月是否已經留言過
     existing_msg = run_query(
         """SELECT id, content, reward_status 
-               FROM messages 
-               WHERE username='albee' AND year_month=%s""",
+               FROM messages WHERE username='albee' AND year_month=%s""",
         (current_ym,),
         fetch=True,
     )
@@ -252,18 +277,22 @@ else:
           st.error("請輸入留言內容！")
         else:
           if existing_msg:
-            # 更新現有留言
             run_query(
                 "UPDATE messages SET content=%s WHERE id=%s",
                 (msg_input, existing_msg[0][0]),
             )
           else:
-            # 新增本月留言
             run_query(
                 """INSERT INTO messages (username, year_month, content, reward_status) 
                          VALUES ('albee', %s, %s, '未審核')""",
                 (current_ym, msg_input),
             )
+
+          send_discord_notification(
+              "💌 **[寵妻銀行心願通知]**\n老婆 Albee 提出了新的心願留言！\n> "
+              f"**心願內容**：{msg_input}\n\n快到後台審核發放獎勵吧！✨"
+          )
+
           st.success("💌 本月心願留言已成功送達給老公！")
           st.rerun()
 
@@ -272,7 +301,7 @@ else:
 
     st.divider()
 
-    # 3. 使用餘額扣款區
+    # 3. 💸 使用基金扣款 (含詳細金額與名目通知)
     st.subheader("💸 使用基金扣款")
     with st.form("spend_balance_form"):
       spend_amt = st.number_input(
@@ -301,12 +330,20 @@ else:
               (time_str, "albee", "system", "消費扣款", spend_reason, spend_amt),
           )
 
+          # 【新功能 2】基金扣款詳細通知
+          send_discord_notification(
+              "💸 **[寵妻基金扣款通知]**\n老婆 Albee 剛剛使用了基金！\n"
+              f"> 💳 **扣款金額**：`$ {spend_amt:,.0f}`\n"
+              f"> 📝 **用途說明**：{spend_reason}\n"
+              f"> 💰 **剩餘餘額**：`$ {new_balance:,.0f}`"
+          )
+
           st.success(f"成功扣款 ${spend_amt}！")
           st.rerun()
 
     st.divider()
 
-    # 4. Coupon 專區
+    # 4. 🎟️ Coupon 專區 (含 Coupon 名稱與詳細內容通知)
     st.subheader("🎟️ 我的可用 Coupon")
     available_coupons = run_query(
         "SELECT id, title, value FROM coupons WHERE owner='albee' AND is_used=0",
@@ -320,7 +357,7 @@ else:
         cp_id, cp_title, cp_val = cp[0], cp[1], cp[2]
         col1, col2 = st.columns([3, 1])
         with col1:
-          st.markdown(f"**🎁 {cp_title}** (面額/價值: ${cp_val})")
+          st.markdown(f"**🎁 {cp_title}** (價值: ${cp_val})")
         with col2:
           if st.button("使用", key=f"use_cp_{cp_id}"):
             time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -339,32 +376,37 @@ else:
                     cp_val,
                 ),
             )
+
+            # 【新功能 3】Coupon 使用詳細通知
+            send_discord_notification(
+                "🎟️ **[Coupon 核銷通知]**\n老婆 Albee 剛剛使用了優惠券！\n"
+                f"> 🎁 **優惠券名稱**：{cp_title}\n"
+                f"> 💎 **權益價值估算**：`$ {cp_val:,.0f}`"
+            )
+
             st.success(f"已成功使用優惠券：{cp_title}！")
             st.rerun()
 
     st.divider()
 
     # 5. 歷史紀錄
-    st.subheader("📜 帳戶與優惠券歷史紀錄")
+    st.subheader("📜 帳戶歷史紀錄")
     history = run_query(
-        """SELECT time, type, content, amount 
-               FROM history 
-               WHERE sender='albee' OR receiver='albee' 
-               ORDER BY id DESC""",
+        """SELECT time, type, content, amount FROM history 
+               WHERE sender='albee' OR receiver='albee' ORDER BY id DESC""",
         fetch=True,
     )
     if history:
-      history_data = []
-      for h in history:
-        history_data.append({
-            "時間": h[0],
-            "類型": h[1],
-            "項目/說明": h[2],
-            "金額/價值": h[3],
-        })
+      history_data = [
+          {
+              "時間": h[0],
+              "類型": h[1],
+              "項目/說明": h[2],
+              "金額/價值": h[3],
+          }
+          for h in history
+      ]
       st.dataframe(history_data, use_container_width=True)
-    else:
-      st.write("尚無歷史紀錄。")
 
   # ==================== 老公 (Admin) 視角 ====================
   elif user == "admin":
@@ -375,14 +417,11 @@ else:
         ["💌 心願留言審核", "💰 轉帳給 Albee", "🎟️ 發放 Coupon", "📜 全局歷史紀錄"]
     )
 
-    # Tab 1: 心願留言審核
     with tab1:
       st.subheader("老婆的心願留言與獎勵發放")
       all_msgs = run_query(
           """SELECT id, year_month, content, reward_status 
-                 FROM messages 
-                 WHERE username='albee' 
-                 ORDER BY id DESC""",
+                 FROM messages WHERE username='albee' ORDER BY id DESC""",
           fetch=True,
       )
 
@@ -405,17 +444,14 @@ else:
                 time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 new_balance = albee_balance + reward_amt
 
-                # 更新餘額
                 run_query(
                     "UPDATE accounts SET balance = %s WHERE username='albee'",
                     (new_balance,),
                 )
-                # 更新留言狀態
                 run_query(
                     "UPDATE messages SET reward_status='已發放獎勵' WHERE id=%s",
                     (m_id,),
                 )
-                # 寫入歷史紀錄 (要求紀錄內容為 X月留言獎勵)
                 month_label = m_ym.split("-")[1] + "月"
                 run_query(
                     """INSERT INTO history (time, sender, receiver, type, content, amount) 
@@ -433,7 +469,6 @@ else:
                 st.success(f"成功發放 ${reward_amt} 給 Albee！")
                 st.rerun()
 
-    # Tab 2: 轉帳
     with tab2:
       st.subheader("轉入額度至 Albee 帳戶")
       with st.form("transfer_form"):
@@ -458,7 +493,6 @@ else:
           st.success(f"成功轉帳 ${trans_amt} 給 Albee！")
           st.rerun()
 
-    # Tab 3: 發放 Coupon
     with tab3:
       st.subheader("手動產生並發放 Coupon")
       with st.form("coupon_form"):
@@ -493,26 +527,23 @@ else:
             st.success(f"成功發放 Coupon：{cp_title}！")
             st.rerun()
 
-    # Tab 4: 全局歷史紀錄
     with tab4:
       st.subheader("所有進出與操作紀錄")
       all_history = run_query(
           """SELECT time, sender, receiver, type, content, amount 
-                 FROM history 
-                 ORDER BY id DESC""",
+                 FROM history ORDER BY id DESC""",
           fetch=True,
       )
       if all_history:
-        history_data = []
-        for h in all_history:
-          history_data.append({
-              "時間": h[0],
-              "發送方": h[1],
-              "接收方": h[2],
-              "類型": h[3],
-              "內容": h[4],
-              "金額/價值": h[5],
-          })
+        history_data = [
+            {
+                "時間": h[0],
+                "發送方": h[1],
+                "接收方": h[2],
+                "類型": h[3],
+                "內容": h[4],
+                "金額/價值": h[5],
+            }
+            for h in all_history
+        ]
         st.dataframe(history_data, use_container_width=True)
-      else:
-        st.write("尚無歷史紀錄。")
