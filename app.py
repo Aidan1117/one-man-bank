@@ -54,7 +54,7 @@ def init_db():
         )
     """)
 
-  # 4. 初始化預設帳號 (admin, wife)，若已存在則略過
+  # 4. 初始化預設帳號 (admin, albee)，若已存在則略過
   run_query("""
         INSERT INTO accounts (username, balance) 
         VALUES ('admin', 0) 
@@ -62,7 +62,7 @@ def init_db():
     """)
   run_query("""
         INSERT INTO accounts (username, balance) 
-        VALUES ('wife', 0) 
+        VALUES ('albee', 0) 
         ON CONFLICT (username) DO NOTHING
     """)
 
@@ -71,7 +71,7 @@ def init_db():
 init_db()
 
 # --- 網頁版面設定 ---
-st.set_page_config(page_title="專屬寵妻銀行", page_icon="💳", layout="centered")
+st.set_page_config(page_title="AA專屬銀行", page_icon="💳", layout="centered")
 
 # --- 登入狀態管理 ---
 if "logged_in" not in st.session_state:
@@ -80,13 +80,13 @@ if "logged_in" not in st.session_state:
 
 # --- 登入畫面 ---
 if not st.session_state.logged_in:
-  st.title("💳 專屬私人銀行登入")
+  st.title("💳 AA專屬銀行登入")
   st.markdown("請輸入帳號密碼以存取您的資產與優惠券。")
 
-  users = {"admin": "1234", "wife": "5678"}
+  users = {"admin": "1117", "albee": "0417"}
 
   with st.form("login_form"):
-    username_input = st.text_input("帳號 (admin / wife)")
+    username_input = st.text_input("帳號 (admin / albee)")
     password_input = st.text_input("密碼", type="password")
     submit_btn = st.form_submit_button("登入")
 
@@ -109,12 +109,12 @@ else:
 
   # --- 查詢目前老婆餘額 ---
   res_balance = run_query(
-      "SELECT balance FROM accounts WHERE username='wife'", fetch=True
+      "SELECT balance FROM accounts WHERE username='albee'", fetch=True
   )
   wife_balance = float(res_balance[0][0]) if res_balance else 0.0
 
   # ==================== 老婆視角 ====================
-  if user == "wife":
+  if user == "albee":
     st.title("👑 老婆的專屬財庫")
 
     st.metric(label="目前可用寵妻基金餘額", value=f"$ {wife_balance:,.0f}")
@@ -140,13 +140,13 @@ else:
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
           run_query(
-              "UPDATE accounts SET balance = %s WHERE username='wife'",
+              "UPDATE accounts SET balance = %s WHERE username='albee'",
               (new_balance,),
           )
           run_query(
               """INSERT INTO history (time, sender, receiver, type, content, amount) 
                        VALUES (%s, %s, %s, %s, %s, %s)""",
-              (time_str, "wife", "system", "消費扣款", spend_reason, spend_amt),
+              (time_str, "albee", "system", "消費扣款", spend_reason, spend_amt),
           )
 
           st.success(f"成功扣款 ${spend_amt}！")
@@ -157,7 +157,7 @@ else:
     # 2. Coupon 專區
     st.subheader("🎟️ 我的可用 Coupon")
     available_coupons = run_query(
-        "SELECT id, title, value FROM coupons WHERE owner='wife' AND is_used=0",
+        "SELECT id, title, value FROM coupons WHERE owner='albee' AND is_used=0",
         fetch=True,
     )
 
@@ -180,7 +180,7 @@ else:
                          VALUES (%s, %s, %s, %s, %s, %s)""",
                 (
                     time_str,
-                    "wife",
+                    "albee",
                     "system",
                     "使用Coupon",
                     cp_title,
@@ -197,7 +197,7 @@ else:
     history = run_query(
         """SELECT time, type, content, amount 
                FROM history 
-               WHERE sender='wife' OR receiver='wife' 
+               WHERE sender='albee' OR receiver='albee' 
                ORDER BY id DESC""",
         fetch=True,
     )
@@ -236,13 +236,13 @@ else:
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
           run_query(
-              "UPDATE accounts SET balance = %s WHERE username='wife'",
+              "UPDATE accounts SET balance = %s WHERE username='albee'",
               (new_balance,),
           )
           run_query(
               """INSERT INTO history (time, sender, receiver, type, content, amount) 
                        VALUES (%s, %s, %s, %s, %s, %s)""",
-              (time_str, "admin", "wife", "轉帳入帳", trans_memo, trans_amt),
+              (time_str, "admin", "albee", "轉帳入帳", trans_memo, trans_amt),
           )
 
           st.success(f"成功轉帳 ${trans_amt} 給老婆！")
@@ -265,7 +265,7 @@ else:
             time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             run_query(
                 """INSERT INTO coupons (owner, title, value, is_used) 
-                         VALUES ('wife', %s, %s, 0)""",
+                         VALUES ('albee', %s, %s, 0)""",
                 (cp_title, cp_val),
             )
             run_query(
@@ -274,7 +274,7 @@ else:
                 (
                     time_str,
                     "admin",
-                    "wife",
+                    "albee",
                     "發放Coupon",
                     cp_title,
                     cp_val,
