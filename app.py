@@ -6,7 +6,7 @@ import streamlit as st
 db_url = st.secrets["database"]["url"]
 
 
-# --- 通用資料庫查詢與更新函式 (適合 Session Pooler 模式) ---
+# --- 通用資料庫查詢與更新函式 ---
 def run_query(query, params=None, fetch=False):
   conn = psycopg2.connect(db_url)
   cursor = conn.cursor()
@@ -22,7 +22,7 @@ def run_query(query, params=None, fetch=False):
 
 # --- 初始化資料庫表格與預設帳號 ---
 def init_db():
-  # 1. 建立帳戶餘額表
+  # 1. 帳戶餘額表
   run_query("""
         CREATE TABLE IF NOT EXISTS accounts (
             username TEXT PRIMARY KEY, 
@@ -30,7 +30,7 @@ def init_db():
         )
     """)
 
-  # 2. 建立 Coupon 表
+  # 2. Coupon 表
   run_query("""
         CREATE TABLE IF NOT EXISTS coupons (
             id SERIAL PRIMARY KEY, 
@@ -41,7 +41,7 @@ def init_db():
         )
     """)
 
-  # 3. 建立歷史紀錄表
+  # 3. 歷史紀錄表
   run_query("""
         CREATE TABLE IF NOT EXISTS history (
             id SERIAL PRIMARY KEY, 
@@ -54,7 +54,27 @@ def init_db():
         )
     """)
 
-  # 4. 初始化預設帳號 (admin, albee)，若已存在則略過
+  # 4. 每月簽到紀錄表 (用年月標記，確保每個月只能簽到一次)
+  run_query("""
+        CREATE TABLE IF NOT EXISTS signins (
+            username TEXT,
+            year_month TEXT,
+            PRIMARY KEY (username, year_month)
+        )
+    """)
+
+  # 5. 每月心願留言板表
+  run_query("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            username TEXT,
+            year_month TEXT,
+            content TEXT,
+            reward_status TEXT DEFAULT '未審核'
+        )
+    """)
+
+  # 6. 初始化預設帳號 (admin, albee)，若已存在則略過
   run_query("""
         INSERT INTO accounts (username, balance) 
         VALUES ('admin', 0) 
@@ -83,6 +103,7 @@ if not st.session_state.logged_in:
   st.title("💳 AA專屬銀行登入")
   st.markdown("請輸入帳號密碼以存取您的資產與優惠券。")
 
+  # 更新後的帳號密碼
   users = {"admin": "1117", "albee": "0417"}
 
   with st.form("login_form"):
@@ -100,43 +121,142 @@ if not st.session_state.logged_in:
 
 else:
   user = st.session_state.username
-  st.sidebar.title(f"歡迎, {'老公 (Admin)' if user=='admin' else '老婆大人'}")
+  st.sidebar.title(f"歡迎, {'老公 (Admin)' if user=='admin' else '老婆大人 (Albee)'}")
 
   if st.sidebar.button("登出"):
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.rerun()
 
-  # --- 查詢目前老婆餘額 ---
+  # --- 查詢目前 Albee 的餘額 ---
   res_balance = run_query(
       "SELECT balance FROM accounts WHERE username='albee'", fetch=True
   )
-  wife_balance = float(res_balance[0][0]) if res_balance else 0.0
+  albee_balance = float(res_balance[0][0]) if res_balance else 0.0
 
-  # ==================== 老婆視角 ====================
+  # ==================== 老婆 (Albee) 視角 ====================
   if user == "albee":
     st.title("👑 老婆的專屬財庫")
 
-    st.metric(label="目前可用寵妻基金餘額", value=f"$ {wife_balance:,.0f}")
+    st.metric(label="目前可用寵妻基金餘額", value=f"$ {albee_balance:,.0f}")
     st.divider()
 
-    # 1. 使用餘額扣款區
+    # 1. 每月簽到區
+    st.subheader("📅 每月專屬簽到")
+    current_ym = datetime.now().strftime("%Y-%m")
+    current_month_str = datetime.now().strftime("%m月")
+
+    # 檢查本月是否已簽到
+    checked_in = run_query(
+        "SELECT 1 FROM signins WHERE username='albee' AND year_month=%s",
+        (current_ym,),
+        fetch=True,
+    )
+
+    if checked_in:
+      st.success(
+          f"✨ 您已經完成 {current_month_str} 的簽到囉！領取 1500 寵妻基金。"
+      )
+    else:
+      if st.button(f"點擊進行 {current_month_str} 簽到 (領取 $1500)"):
+        time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_balance = albee_balance + 1500
+
+        # 寫入簽到紀錄
+        run_query(
+            "INSERT INTO signins (username, year_month) VALUES ('albee', %s)",
+            (current_ym,),
+        )
+        # 更新餘額
+        run_query(
+            "UPDATE accounts SET balance = %s WHERE username='albee'",
+            (new_balance,),
+        )
+        # 寫入歷史紀錄
+        run_query(
+            """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                     VALUES (%s, %s, %s, %s, %s, %s)""",
+            (
+                time_str,
+                "system",
+                "albee",
+                "簽到獎勵",
+                f"{current_month_str}簽到基金",
+                1500,
+            ),
+        )
+
+        st.success(f"🎉 簽到成功！已自動幫您增加 $1,500 寵妻基金！")
+        st.rerun()
+
+    st.divider()
+
+    # 2. 每月心願留言板區
+    st.subheader("💌 每月心願留言板")
+    st.markdown(
+        "寫下您本月的心願或想對老公說的話，老公看到後會為您審核並分配額度喔！"
+    )
+
+    # 檢查本月是否已經留言過
+    existing_msg = run_query(
+        """SELECT id, content, reward_status 
+               FROM messages 
+               WHERE username='albee' AND year_month=%s""",
+        (current_ym,),
+        fetch=True,
+    )
+
+    with st.form("monthly_message_form"):
+      msg_input = st.text_area(
+          "本月心願與留言",
+          placeholder=(
+              "例如: 這陣子辛苦了想去吃高級燒肉 / 想要一個小廢物包"
+          ),
+      )
+      msg_submit = st.form_submit_button("送出/更新本月心願")
+
+      if msg_submit:
+        if not msg_input.strip():
+          st.error("請輸入留言內容！")
+        else:
+          if existing_msg:
+            # 更新現有留言
+            run_query(
+                "UPDATE messages SET content=%s WHERE id=%s",
+                (msg_input, existing_msg[0][0]),
+            )
+          else:
+            # 新增本月留言
+            run_query(
+                """INSERT INTO messages (username, year_month, content, reward_status) 
+                         VALUES ('albee', %s, %s, '未審核')""",
+                (current_ym, msg_input),
+            )
+          st.success("💌 本月心願留言已成功送達給老公！")
+          st.rerun()
+
+    if existing_msg:
+      st.info(f"目前狀態：本月心願已送出（狀態：{existing_msg[0][2]}）")
+
+    st.divider()
+
+    # 3. 使用餘額扣款區
     st.subheader("💸 使用基金扣款")
     with st.form("spend_balance_form"):
       spend_amt = st.number_input(
           "欲使用的金額",
           min_value=1.0,
-          max_value=max(1.0, float(wife_balance)),
+          max_value=max(1.0, float(albee_balance)),
           step=1.0,
       )
       spend_reason = st.text_input("用途說明 (例如: 買新衣服/下午茶)")
       spend_submit = st.form_submit_button("確認扣款")
 
       if spend_submit:
-        if spend_amt > wife_balance:
+        if spend_amt > albee_balance:
           st.error("餘額不足！")
         else:
-          new_balance = wife_balance - spend_amt
+          new_balance = albee_balance - spend_amt
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
           run_query(
@@ -154,7 +274,7 @@ else:
 
     st.divider()
 
-    # 2. Coupon 專區
+    # 4. Coupon 專區
     st.subheader("🎟️ 我的可用 Coupon")
     available_coupons = run_query(
         "SELECT id, title, value FROM coupons WHERE owner='albee' AND is_used=0",
@@ -192,7 +312,7 @@ else:
 
     st.divider()
 
-    # 3. 歷史紀錄
+    # 5. 歷史紀錄
     st.subheader("📜 帳戶與優惠券歷史紀錄")
     history = run_query(
         """SELECT time, type, content, amount 
@@ -217,22 +337,80 @@ else:
   # ==================== 老公 (Admin) 視角 ====================
   elif user == "admin":
     st.title("🛠️ 老公的管理後台")
-    st.info(f"目前老婆帳戶餘額：$ {wife_balance:,.0f}")
+    st.info(f"目前 Albee 帳戶餘額：$ {albee_balance:,.0f}")
 
-    tab1, tab2, tab3 = st.tabs(
-        ["💰 轉帳給老婆", "🎟️ 發放 Coupon", "📜 全局歷史紀錄"]
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ["💌 心願留言審核", "💰 轉帳給 Albee", "🎟️ 發放 Coupon", "📜 全局歷史紀錄"]
     )
 
-    # Tab 1: 轉帳
+    # Tab 1: 心願留言審核
     with tab1:
-      st.subheader("轉入額度至老婆帳戶")
+      st.subheader("老婆的心願留言與獎勵發放")
+      all_msgs = run_query(
+          """SELECT id, year_month, content, reward_status 
+                 FROM messages 
+                 WHERE username='albee' 
+                 ORDER BY id DESC""",
+          fetch=True,
+      )
+
+      if not all_msgs:
+        st.info("目前尚無老婆的心願留言。")
+      else:
+        for m in all_msgs:
+          m_id, m_ym, m_content, m_status = m[0], m[1], m[2], m[3]
+          with st.container(border=True):
+            st.markdown(f"**📅 月份：{m_ym}** | 狀態：`{m_status}`")
+            st.markdown(f"💬 **心願內容**：{m_content}")
+
+            with st.form(f"reward_form_{m_id}"):
+              reward_amt = st.number_input(
+                  "分配獎勵金額 ($)", min_value=1.0, step=100.0, key=f"amt_{m_id}"
+              )
+              reward_submit = st.form_submit_button("確認發放獎勵")
+
+              if reward_submit:
+                time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                new_balance = albee_balance + reward_amt
+
+                # 更新餘額
+                run_query(
+                    "UPDATE accounts SET balance = %s WHERE username='albee'",
+                    (new_balance,),
+                )
+                # 更新留言狀態
+                run_query(
+                    "UPDATE messages SET reward_status='已發放獎勵' WHERE id=%s",
+                    (m_id,),
+                )
+                # 寫入歷史紀錄 (要求紀錄內容為 X月留言獎勵)
+                month_label = m_ym.split("-")[1] + "月"
+                run_query(
+                    """INSERT INTO history (time, sender, receiver, type, content, amount) 
+                             VALUES (%s, %s, %s, %s, %s, %s)""",
+                    (
+                        time_str,
+                        "admin",
+                        "albee",
+                        "留言獎勵",
+                        f"{month_label}留言獎勵",
+                        reward_amt,
+                    ),
+                )
+
+                st.success(f"成功發放 ${reward_amt} 給 Albee！")
+                st.rerun()
+
+    # Tab 2: 轉帳
+    with tab2:
+      st.subheader("轉入額度至 Albee 帳戶")
       with st.form("transfer_form"):
         trans_amt = st.number_input("轉帳金額", min_value=1.0, step=100.0)
         trans_memo = st.text_input("備註 (例如: 本月零用錢/辛苦費)")
         trans_submit = st.form_submit_button("確認轉帳")
 
         if trans_submit:
-          new_balance = wife_balance + trans_amt
+          new_balance = albee_balance + trans_amt
           time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
           run_query(
@@ -245,11 +423,11 @@ else:
               (time_str, "admin", "albee", "轉帳入帳", trans_memo, trans_amt),
           )
 
-          st.success(f"成功轉帳 ${trans_amt} 給老婆！")
+          st.success(f"成功轉帳 ${trans_amt} 給 Albee！")
           st.rerun()
 
-    # Tab 2: 發放 Coupon
-    with tab2:
+    # Tab 3: 發放 Coupon
+    with tab3:
       st.subheader("手動產生並發放 Coupon")
       with st.form("coupon_form"):
         cp_title = st.text_input(
@@ -283,8 +461,8 @@ else:
             st.success(f"成功發放 Coupon：{cp_title}！")
             st.rerun()
 
-    # Tab 3: 全局歷史紀錄
-    with tab3:
+    # Tab 4: 全局歷史紀錄
+    with tab4:
       st.subheader("所有進出與操作紀錄")
       all_history = run_query(
           """SELECT time, sender, receiver, type, content, amount 
