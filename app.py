@@ -232,7 +232,7 @@ if "logged_in" not in st.session_state:
 if not st.session_state.logged_in:
   st.markdown(
       "<h1 style='text-align: center; color: #ff6b81; font-weight: 700;'>🎀"
-      " AA專屬銀行 🎀</h1>",
+      " AA銀行 🎀</h1>",
       unsafe_allow_html=True,
   )
   st.markdown(
