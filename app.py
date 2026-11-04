@@ -91,10 +91,9 @@ def init_db():
 init_db()
 
 
-# --- 檢查 Supabase 防睡眠機制 (超過 6 天無活動則發送 Discord 提醒) ---
+# --- 檢查 Supabase 防睡眠機制 ---
 def check_supabase_sleep_risk():
   try:
-    # 取得歷史紀錄中最新的一筆時間
     res = run_query(
         "SELECT time FROM history ORDER BY id DESC LIMIT 1", fetch=True
     )
@@ -103,48 +102,121 @@ def check_supabase_sleep_risk():
       last_time = datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
       now = datetime.now()
 
-      # 如果超過 6 天沒有任何操作紀錄
       if now - last_time >= timedelta(days=6):
-        # 檢查今天是否已經發送過防睡眠提醒（避免每次重新整理網頁都轟炸 Discord）
         today_check_key = f"sleep_warn_{now.strftime('%Y-%m-%d')}"
         if today_check_key not in st.session_state:
           send_discord_notification(
               "⚠️ **[Supabase 防睡眠系統提醒]**\n"
               f"距離上次資料庫活動已超過 6 天（上次時間：`{last_time_str}`）。\n"
-              "請盡快登入網站進行互動或點擊一下，防止資料庫進入休眠狀態！✨"
+              "請盡快登入網站進行互動，防止資料庫進入休眠狀態！✨"
           )
           st.session_state[today_check_key] = True
   except Exception as e:
     print(f"防睡眠檢查失敗: {e}")
 
 
-# 執行防睡眠檢查
 check_supabase_sleep_risk()
 
 # --- 網頁版面設定 ---
-st.set_page_config(page_title="AA專屬銀行", page_icon="💳", layout="centered")
+st.set_page_config(
+    page_title="AA專屬銀行",
+    page_icon="👑",
+    layout="centered",
+    initial_sidebar_state="collapsed",
+)
 
-# --- 自定義 Hello Kitty & Daniel 背景樣式 ---
+# --- 🔥 高級浪漫美化 UI (Glassmorphism & Custom Styling) ---
 st.markdown(
     """
     <style>
+    /* 1. 全局背景與字型優化 */
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Noto Sans TC', sans-serif;
+    }
+    
     .stApp {
-        background-image: url("https://i.pinimg.com/236x/f9/5f/8c/f95f8c0080dcef40aa4d8c97b7fab9b5.jpg");
+        background-image: url("https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1600");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }
+
+    /* 隱藏預設的 Streamlit 頂部與頁尾標誌 */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+
+    /* 2. 主卡片磨砂玻璃效果 (Glassmorphism) */
     .block-container {
-        background-color: rgba(255, 255, 255, 0.88);
-        padding: 2.5rem;
-        border-radius: 20px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        margin-top: 2rem;
+        background: rgba(255, 255, 255, 0.78);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.5);
+        padding: 2.2rem 2rem !important;
+        box-shadow: 0 12px 40px 0 rgba(255, 182, 193, 0.35);
+        margin-top: 1.5rem;
         margin-bottom: 2rem;
     }
+
+    /* 3. 側邊欄磨砂設計 */
     [data-testid="stSidebar"] {
-        background-color: rgba(255, 240, 245, 0.92);
+        background: rgba(255, 240, 245, 0.85);
+        backdrop-filter: blur(12px);
+        border-right: 1px solid rgba(255, 255, 255, 0.4);
+    }
+
+    /* 4. 自訂漸層浪漫按鈕 (Pink Gradient Button) */
+    .stButton > button {
+        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #feada6 100%);
+        color: #5a2a3a !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 50px !important;
+        padding: 0.6rem 1.8rem !important;
+        box-shadow: 0 4px 15px rgba(255, 154, 158, 0.4) !important;
+        transition: all 0.3s ease-in-out !important;
+        width: 100%;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(255, 154, 158, 0.6) !important;
+        color: #4a1525 !important;
+    }
+
+    /* 5. 表單發送按鈕客製化 */
+    .stFormSubmitButton > button {
+        background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+        color: #1e3c72 !important;
+        font-weight: 700 !important;
+        border: none !important;
+        border-radius: 50px !important;
+        box-shadow: 0 4px 15px rgba(161, 196, 253, 0.4) !important;
+    }
+
+    /* 6. 輸入框柔和視覺 */
+    .stTextInput input, .stNumberInput input, .stTextArea textarea {
+        border-radius: 14px !important;
+        border: 1.5px solid #ffe1e8 !important;
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        transition: border 0.3s ease;
+    }
+    
+    .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
+        border-color: #ff9a9e !important;
+        box-shadow: 0 0 8px rgba(255, 154, 158, 0.3) !important;
+    }
+
+    /* 7. 分隔線美化 */
+    hr {
+        border: 0;
+        height: 1px;
+        background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(255, 154, 158, 0.75), rgba(0, 0, 0, 0));
+        margin: 1.8rem 0;
     }
     </style>
     """,
@@ -158,22 +230,28 @@ if "logged_in" not in st.session_state:
 
 # --- 登入畫面 ---
 if not st.session_state.logged_in:
-  st.title("💳 AA專屬銀行登入")
-  st.markdown("請輸入帳號密碼以存取您的資產與優惠券。")
+  st.markdown(
+      "<h1 style='text-align: center; color: #ff6b81; font-weight: 700;'>🎀"
+      " AA專屬私人銀行 🎀</h1>",
+      unsafe_allow_html=True,
+  )
+  st.markdown(
+      "<p style='text-align: center; color: #777;'>Welcome back! 請輸入專屬金鑰存取您的資產。</p>",
+      unsafe_allow_html=True,
+  )
 
   users = {"admin": "1117", "albee": "0417"}
 
   with st.form("login_form"):
-    username_input = st.text_input("帳號 (admin / albee)")
-    password_input = st.text_input("密碼", type="password")
-    submit_btn = st.form_submit_button("登入")
+    username_input = st.text_input("👤 帳號 (admin / albee)")
+    password_input = st.text_input("🔑 密碼", type="password")
+    submit_btn = st.form_submit_button("✨ 安全登入")
 
     if submit_btn:
       if username_input in users and users[username_input] == password_input:
         st.session_state.logged_in = True
         st.session_state.username = username_input
 
-        # 【新功能 1】Albee 登入時發送 Discord 通知
         if username_input == "albee":
           send_discord_notification(
               "👑 **[登入通知]**\n老婆大人 Albee 剛剛登入了專屬寵妻銀行！✨"
@@ -185,9 +263,9 @@ if not st.session_state.logged_in:
 
 else:
   user = st.session_state.username
-  st.sidebar.title(f"歡迎, {'老公 (Admin)' if user=='admin' else '老婆大人 (Albee)'}")
+  st.sidebar.title(f"✨ 歡迎，{'老公 (Admin)' if user=='admin' else '老婆大人 (Albee)'}")
 
-  if st.sidebar.button("登出"):
+  if st.sidebar.button("🔒 安全登出"):
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.rerun()
@@ -199,12 +277,26 @@ else:
 
   # ==================== 老婆 (Albee) 視角 ====================
   if user == "albee":
-    st.title("👑 老婆的專屬財庫")
-    st.metric(label="目前可用寵妻基金餘額", value=f"$ {albee_balance:,.0f}")
-    st.divider()
+    # 🔥 客製化尊榮頭部卡片
+    st.markdown(
+        f"""
+        <div style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); 
+                    padding: 24px; border-radius: 20px; text-align: center; 
+                    box-shadow: 0 10px 20px rgba(255, 154, 158, 0.3); margin-bottom: 25px;">
+            <h3 style="color: #fff; margin:0; font-size: 1.2rem; font-weight: 500;">👑 尊榮老婆大人財庫餘額</h3>
+            <h1 style="color: #ffffff; font-size: 2.8rem; font-weight: 800; margin: 8px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.15);">
+                $ {albee_balance:,.0f}
+            </h1>
+            <span style="background: rgba(255,255,255,0.4); color: #4a1525; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                無限愛意無限期無上限 ✨
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # 1. 📅 每月專屬簽到
-    st.subheader("📅 每月專屬簽到")
+    st.markdown("### 📅 每月專屬簽到")
     current_ym = datetime.now().strftime("%Y-%m")
     current_month_str = datetime.now().strftime("%m月")
 
@@ -216,10 +308,10 @@ else:
 
     if checked_in:
       st.info(
-          f"✨ 您已經完成 {current_month_str} 的簽到囉！已領取 1500 寵妻基金。"
+          f"✨ 您已經完成 {current_month_str} 的簽到囉！已領取 $1,500 寵妻基金。"
       )
     else:
-      if st.button(f"點擊進行 {current_month_str} 簽到 (領取 $1500)"):
+      if st.button(f"💖 點擊進行 {current_month_str} 簽到 (領取 $1,500)"):
         time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_balance = albee_balance + 1500
 
@@ -255,7 +347,7 @@ else:
     st.divider()
 
     # 2. 💌 每月心願留言板
-    st.subheader("💌 每月心願留言板")
+    st.markdown("### 💌 每月心願許願池")
     existing_msg = run_query(
         """SELECT id, content, reward_status 
                FROM messages WHERE username='albee' AND year_month=%s""",
@@ -270,7 +362,7 @@ else:
               "例如: 這陣子辛苦了想去吃高級燒肉 / 想要一個小廢物包"
           ),
       )
-      msg_submit = st.form_submit_button("送出/更新本月心願")
+      msg_submit = st.form_submit_button("🕊️ 送出 / 更新本月心願")
 
       if msg_submit:
         if not msg_input.strip():
@@ -297,21 +389,21 @@ else:
           st.rerun()
 
     if existing_msg:
-      st.info(f"目前狀態：本月心願已送出（狀態：{existing_msg[0][2]}）")
+      st.info(f"📌 目前狀態：本月心願已送出（狀態：{existing_msg[0][2]}）")
 
     st.divider()
 
-    # 3. 💸 使用基金扣款 (含詳細金額與名目通知)
-    st.subheader("💸 使用基金扣款")
+    # 3. 💸 使用基金扣款
+    st.markdown("### 🛍️ 使用基金扣款")
     with st.form("spend_balance_form"):
       spend_amt = st.number_input(
-          "欲使用的金額",
+          "欲使用的金額 ($)",
           min_value=1.0,
           max_value=max(1.0, float(albee_balance)),
           step=1.0,
       )
-      spend_reason = st.text_input("用途說明 (例如: 買新衣服/下午茶)")
-      spend_submit = st.form_submit_button("確認扣款")
+      spend_reason = st.text_input("用途說明 (例如: 買新衣服 / 下午茶)")
+      spend_submit = st.form_submit_button("💳 確認扣款消費")
 
       if spend_submit:
         if spend_amt > albee_balance:
@@ -330,7 +422,6 @@ else:
               (time_str, "albee", "system", "消費扣款", spend_reason, spend_amt),
           )
 
-          # 【新功能 2】基金扣款詳細通知
           send_discord_notification(
               "💸 **[寵妻基金扣款通知]**\n老婆 Albee 剛剛使用了基金！\n"
               f"> 💳 **扣款金額**：`$ {spend_amt:,.0f}`\n"
@@ -343,8 +434,8 @@ else:
 
     st.divider()
 
-    # 4. 🎟️ Coupon 專區 (含 Coupon 名稱與詳細內容通知)
-    st.subheader("🎟️ 我的可用 Coupon")
+    # 4. 🎟️ Coupon 專區
+    st.markdown("### 🎟️ 專屬權益 Coupons")
     available_coupons = run_query(
         "SELECT id, title, value FROM coupons WHERE owner='albee' AND is_used=0",
         fetch=True,
@@ -357,9 +448,9 @@ else:
         cp_id, cp_title, cp_val = cp[0], cp[1], cp[2]
         col1, col2 = st.columns([3, 1])
         with col1:
-          st.markdown(f"**🎁 {cp_title}** (價值: ${cp_val})")
+          st.markdown(f"**🎁 {cp_title}** *(估值: ${cp_val})*")
         with col2:
-          if st.button("使用", key=f"use_cp_{cp_id}"):
+          if st.button("立即兌換", key=f"use_cp_{cp_id}"):
             time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             run_query(
                 "UPDATE coupons SET is_used = 1 WHERE id = %s", (int(cp_id),)
@@ -377,7 +468,6 @@ else:
                 ),
             )
 
-            # 【新功能 3】Coupon 使用詳細通知
             send_discord_notification(
                 "🎟️ **[Coupon 核銷通知]**\n老婆 Albee 剛剛使用了優惠券！\n"
                 f"> 🎁 **優惠券名稱**：{cp_title}\n"
@@ -390,7 +480,7 @@ else:
     st.divider()
 
     # 5. 歷史紀錄
-    st.subheader("📜 帳戶歷史紀錄")
+    st.markdown("### 📜 交易歷史明細")
     history = run_query(
         """SELECT time, type, content, amount FROM history 
                WHERE sender='albee' OR receiver='albee' ORDER BY id DESC""",
@@ -401,8 +491,8 @@ else:
           {
               "時間": h[0],
               "類型": h[1],
-              "項目/說明": h[2],
-              "金額/價值": h[3],
+              "項目說明": h[2],
+              "金額/價值": f"$ {h[3]:,.0f}",
           }
           for h in history
       ]
@@ -410,11 +500,11 @@ else:
 
   # ==================== 老公 (Admin) 視角 ====================
   elif user == "admin":
-    st.title("🛠️ 老公的管理後台")
-    st.info(f"目前 Albee 帳戶餘額：$ {albee_balance:,.0f}")
+    st.markdown("## 🛠️ 老公的控制中心")
+    st.success(f"目前 Albee 帳戶可用餘額：$ {albee_balance:,.0f}")
 
     tab1, tab2, tab3, tab4 = st.tabs(
-        ["💌 心願留言審核", "💰 轉帳給 Albee", "🎟️ 發放 Coupon", "📜 全局歷史紀錄"]
+        ["💌 心願審核", "💰 轉帳放款", "🎟️ 發放 Coupon", "📜 全局明細"]
     )
 
     with tab1:
@@ -438,7 +528,7 @@ else:
               reward_amt = st.number_input(
                   "分配獎勵金額 ($)", min_value=1.0, step=100.0, key=f"amt_{m_id}"
               )
-              reward_submit = st.form_submit_button("確認發放獎勵")
+              reward_submit = st.form_submit_button("🎁 發放心願獎勵")
 
               if reward_submit:
                 time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -472,9 +562,9 @@ else:
     with tab2:
       st.subheader("轉入額度至 Albee 帳戶")
       with st.form("transfer_form"):
-        trans_amt = st.number_input("轉帳金額", min_value=1.0, step=100.0)
-        trans_memo = st.text_input("備註 (例如: 本月零用錢/辛苦費)")
-        trans_submit = st.form_submit_button("確認轉帳")
+        trans_amt = st.number_input("轉帳金額 ($)", min_value=1.0, step=100.0)
+        trans_memo = st.text_input("備註 (例如: 本月愛妻基金 / 犒賞特別獎款)")
+        trans_submit = st.form_submit_button("💸 確認撥款")
 
         if trans_submit:
           new_balance = albee_balance + trans_amt
@@ -497,10 +587,10 @@ else:
       st.subheader("手動產生並發放 Coupon")
       with st.form("coupon_form"):
         cp_title = st.text_input(
-            "Coupon 名稱 (例如: 免費按摩一次 / 週末任選大餐)"
+            "Coupon 名稱 (例如: 無條件按摩 30 分鐘 / 週末無菜單料理)"
         )
         cp_val = st.number_input("權益價值估算 ($)", min_value=0.0, step=50.0)
-        cp_submit = st.form_submit_button("發放 Coupon")
+        cp_submit = st.form_submit_button("🎟️ 簽發專屬 Coupon")
 
         if cp_submit:
           if cp_title.strip() == "":
@@ -542,7 +632,7 @@ else:
                 "接收方": h[2],
                 "類型": h[3],
                 "內容": h[4],
-                "金額/價值": h[5],
+                "金額/價值": f"$ {h[5]:,.0f}",
             }
             for h in all_history
         ]
