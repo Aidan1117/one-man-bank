@@ -119,107 +119,103 @@ check_supabase_sleep_risk()
 
 # --- 網頁版面設定 ---
 st.set_page_config(
-    page_title="AA銀行",
+    page_title="AA專屬銀行",
     page_icon="👑",
     layout="centered",
     initial_sidebar_state="collapsed",
 )
 
-# --- 🔥 高級網銀質感美化 UI (Dark Luxury Glassmorphic Theme) ---
+# --- 🔥 高級浪漫美化 UI (Glassmorphism & Custom Styling) ---
 st.markdown(
     """
     <style>
+    /* 1. 全局背景與字型優化 */
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Noto Sans TC', sans-serif;
     }
     
-    /* 替換為精緻高雅的藍金幾何奢華背景 */
     .stApp {
-        background-image: url("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=1600");
+        background-image: url("https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=1600");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }
 
+    /* 隱藏預設的 Streamlit 頂部與頁尾標誌 */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* 主卡片精緻半透明磨砂質感 (與深藍金背景完美融合) */
+    /* 2. 主卡片磨砂玻璃效果 (Glassmorphism) */
     .block-container {
-        background: rgba(20, 30, 48, 0.78);
+        background: rgba(255, 255, 255, 0.78);
         backdrop-filter: blur(16px);
         -webkit-backdrop-filter: blur(16px);
         border-radius: 24px;
-        border: 1px solid rgba(212, 175, 55, 0.3); /* 淡淡的高級金邊 */
+        border: 1px solid rgba(255, 255, 255, 0.5);
         padding: 2.2rem 2rem !important;
-        box-shadow: 0 16px 48px 0 rgba(0, 0, 0, 0.5);
+        box-shadow: 0 12px 40px 0 rgba(255, 182, 193, 0.35);
         margin-top: 1.5rem;
         margin-bottom: 2rem;
-        color: #f0f0f0;
     }
 
-    /* 側邊欄設計 */
+    /* 3. 側邊欄磨砂設計 */
     [data-testid="stSidebar"] {
-        background: rgba(15, 23, 42, 0.90);
+        background: rgba(255, 240, 245, 0.85);
         backdrop-filter: blur(12px);
-        border-right: 1px solid rgba(212, 175, 55, 0.2);
+        border-right: 1px solid rgba(255, 255, 255, 0.4);
     }
 
-    /* 玫瑰金奢華流光按鈕 */
+    /* 4. 自訂漸層浪漫按鈕 (Pink Gradient Button) */
     .stButton > button {
-        background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
-        color: #1a202c !important;
+        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #feada6 100%);
+        color: #5a2a3a !important;
         font-weight: 700 !important;
         border: none !important;
         border-radius: 50px !important;
         padding: 0.6rem 1.8rem !important;
-        box-shadow: 0 4px 15px rgba(142, 197, 252, 0.3) !important;
+        box-shadow: 0 4px 15px rgba(255, 154, 158, 0.4) !important;
         transition: all 0.3s ease-in-out !important;
         width: 100%;
     }
     
     .stButton > button:hover {
         transform: translateY(-2px) scale(1.02);
-        box-shadow: 0 8px 25px rgba(224, 195, 252, 0.5) !important;
+        box-shadow: 0 8px 25px rgba(255, 154, 158, 0.6) !important;
+        color: #4a1525 !important;
     }
 
-    /* 表單發送按鈕 */
+    /* 5. 表單發送按鈕客製化 */
     .stFormSubmitButton > button {
-        background: linear-gradient(135deg, #f6d365 0%, #fda085 100%);
-        color: #2d132c !important;
+        background: linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%);
+        color: #1e3c72 !important;
         font-weight: 700 !important;
         border: none !important;
         border-radius: 50px !important;
-        box-shadow: 0 4px 15px rgba(246, 211, 101, 0.4) !important;
+        box-shadow: 0 4px 15px rgba(161, 196, 253, 0.4) !important;
     }
 
-    /* 輸入框質感修飾 */
+    /* 6. 輸入框柔和視覺 */
     .stTextInput input, .stNumberInput input, .stTextArea textarea {
         border-radius: 14px !important;
-        border: 1.5px solid rgba(212, 175, 55, 0.4) !important;
-        background-color: rgba(255, 255, 255, 0.95) !important;
-        color: #1a202c !important;
+        border: 1.5px solid #ffe1e8 !important;
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        transition: border 0.3s ease;
     }
     
     .stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus {
-        border-color: #f6d365 !important;
-        box-shadow: 0 0 10px rgba(246, 211, 101, 0.4) !important;
+        border-color: #ff9a9e !important;
+        box-shadow: 0 0 8px rgba(255, 154, 158, 0.3) !important;
     }
 
-    /* 標題與文字色彩優化 */
-    h1, h2, h3, h4, h5, h6, p, span, label {
-        color: #f8fafc !important;
-    }
-
-    /* 分隔線 */
+    /* 7. 分隔線美化 */
     hr {
         border: 0;
         height: 1px;
-        background-image: linear-gradient(to right, rgba(212, 175, 55, 0), rgba(212, 175, 55, 0.6), rgba(212, 175, 55, 0));
+        background-image: linear-gradient(to right, rgba(0, 0, 0, 0), rgba(255, 154, 158, 0.75), rgba(0, 0, 0, 0));
         margin: 1.8rem 0;
     }
     </style>
@@ -235,12 +231,12 @@ if "logged_in" not in st.session_state:
 # --- 登入畫面 ---
 if not st.session_state.logged_in:
   st.markdown(
-      "<h1 style='text-align: center; color: #f6d365; font-weight:"
-      " 700;'>🎀 AA銀行 🎀</h1>",
+      "<h1 style='text-align: center; color: #ff6b81; font-weight: 700;'>🎀"
+      " AA專屬銀行 🎀</h1>",
       unsafe_allow_html=True,
   )
   st.markdown(
-      "<p style='text-align: center; color: #cbd5e1;'>Welcome back! 請輸入專屬金鑰存取您的專屬資產。</p>",
+      "<p style='text-align: center; color: #777;'>Welcome back! 請輸入專屬金鑰存取您的資產。</p>",
       unsafe_allow_html=True,
   )
 
@@ -267,9 +263,7 @@ if not st.session_state.logged_in:
 
 else:
   user = st.session_state.username
-  st.sidebar.title(
-      f"✨ 歡迎，{'老公 (Admin)' if user=='admin' else '老婆大人 (Albee)'}"
-  )
+  st.sidebar.title(f"✨ 歡迎，{'老公 (Admin)' if user=='admin' else '老婆大人 (Albee)'}")
 
   if st.sidebar.button("🔒 安全登出"):
     st.session_state.logged_in = False
@@ -283,19 +277,18 @@ else:
 
   # ==================== 老婆 (Albee) 視角 ====================
   if user == "albee":
-    # 尊榮財庫卡片 (黑金奢華風)
+    # 🔥 客製化尊榮頭部卡片
     st.markdown(
         f"""
-        <div style="background: linear-gradient(135deg, #1f2937 0%, #111827 100%); 
-                    padding: 26px; border-radius: 20px; text-align: center; 
-                    border: 1px solid rgba(246, 211, 101, 0.4);
-                    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6); margin-bottom: 25px;">
-            <h3 style="color: #f6d365 !important; margin:0; font-size: 1.1rem; font-weight: 500; letter-spacing: 1px;">👑 VIP 尊榮老婆大人財庫餘額</h3>
-            <h1 style="color: #ffffff !important; font-size: 2.8rem; font-weight: 800; margin: 10px 0; text-shadow: 0 2px 10px rgba(246,211,101,0.3);">
+        <div style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); 
+                    padding: 24px; border-radius: 20px; text-align: center; 
+                    box-shadow: 0 10px 20px rgba(255, 154, 158, 0.3); margin-bottom: 25px;">
+            <h3 style="color: #fff; margin:0; font-size: 1.2rem; font-weight: 500;">👑 尊榮老婆大人財庫餘額</h3>
+            <h1 style="color: #ffffff; font-size: 2.8rem; font-weight: 800; margin: 8px 0; text-shadow: 2px 2px 4px rgba(0,0,0,0.15);">
                 $ {albee_balance:,.0f}
             </h1>
-            <span style="background: rgba(246,211,101,0.15); color: #f6d365 !important; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600; border: 1px solid rgba(246,211,101,0.3);">
-                DESIGNED FOR ALBEE | SINCE 2026 ✨
+            <span style="background: rgba(255,255,255,0.4); color: #4a1525; padding: 4px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">
+                無限愛意無限期無上限 ✨
             </span>
         </div>
         """,
@@ -609,9 +602,6 @@ else:
                          VALUES ('albee', %s, %s, 0)""",
                 (cp_title, cp_val),
             )
-            run_query(
-                """SELECT 1 FROM history"""
-            )  # Placeholder query
             run_query(
                 """INSERT INTO history (time, sender, receiver, type, content, amount) 
                          VALUES (%s, %s, %s, %s, %s, %s)""",
