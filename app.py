@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import psycopg2
 import requests
 import streamlit as st
@@ -19,17 +19,27 @@ def send_discord_notification(message):
     print(f"Discord 推播失敗: {e}")
 
 
+# --- 資料庫連線池快取 ---
+@st.cache_resource
+def get_db_connection():
+  return psycopg2.connect(db_url)
+
+
 # --- 通用資料庫查詢與更新函式 ---
 def run_query(query, params=None, fetch=False):
-  conn = psycopg2.connect(db_url)
+  conn = get_db_connection()
   cursor = conn.cursor()
-  cursor.execute(query, params)
-  result = None
-  if fetch:
-    result = cursor.fetchall()
-  conn.commit()
-  cursor.close()
-  conn.close()
+  try:
+    cursor.execute(query, params)
+    result = None
+    if fetch:
+      result = cursor.fetchall()
+    conn.commit()
+  except Exception as e:
+    conn.rollback()
+    raise e
+  finally:
+    cursor.close()
   return result
 
 
@@ -89,7 +99,6 @@ def init_db():
 
 
 init_db()
-
 
 # --- 網頁版面設定 ---
 st.set_page_config(
