@@ -91,32 +91,6 @@ def init_db():
 init_db()
 
 
-# --- 檢查 Supabase 防睡眠機制 ---
-def check_supabase_sleep_risk():
-  try:
-    res = run_query(
-        "SELECT time FROM history ORDER BY id DESC LIMIT 1", fetch=True
-    )
-    if res and res[0][0]:
-      last_time_str = res[0][0]
-      last_time = datetime.strptime(last_time_str, "%Y-%m-%d %H:%M:%S")
-      now = datetime.now()
-
-      if now - last_time >= timedelta(days=6):
-        today_check_key = f"sleep_warn_{now.strftime('%Y-%m-%d')}"
-        if today_check_key not in st.session_state:
-          send_discord_notification(
-              "⚠️ **[Supabase 防睡眠系統提醒]**\n"
-              f"距離上次資料庫活動已超過 6 天（上次時間：`{last_time_str}`）。\n"
-              "請盡快登入網站進行互動，防止資料庫進入休眠狀態！✨"
-          )
-          st.session_state[today_check_key] = True
-  except Exception as e:
-    print(f"防睡眠檢查失敗: {e}")
-
-
-check_supabase_sleep_risk()
-
 # --- 網頁版面設定 ---
 st.set_page_config(
     page_title="AA專屬銀行",
